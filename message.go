@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net/url"
 	"time"
 
@@ -49,6 +48,10 @@ const (
 	Changed  = "point.changed"
 )
 
+var (
+	errInitCnn = errors.New("create connection failed")
+)
+
 func NewWebsocker(host string, userId string, name string) *Websocker {
 
 	return &Websocker{
@@ -57,13 +60,20 @@ func NewWebsocker(host string, userId string, name string) *Websocker {
 		name:   name,
 	}
 }
-func (w *Websocker) Connect() error {
-	wsSessionId, err := getWsSessionId(w.host, w.userId)
-	if err != nil {
-		log.Println("login:", err)
-		return err
+
+func (w *Websocker) ConnectUntilSuccess() string {
+	for {
+		wsSessionId, err := getWsSessionId(w.host, w.userId)
+		if err != nil {
+			time.Sleep(200 * time.Millisecond)
+			continue
+		}
+		return wsSessionId
 	}
-	w.wsSessionID = wsSessionId
+}
+
+func (w *Websocker) Connect() error {
+	w.wsSessionID = w.ConnectUntilSuccess()
 
 	wsUrl := fmt.Sprintf("ws/v1/players/%s/ws/%s", w.userId, w.wsSessionID)
 
@@ -71,8 +81,7 @@ func (w *Websocker) Connect() error {
 
 	cnn, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {
-		log.Println("create connection failed")
-		return errors.New("create connection failed")
+		return errInitCnn
 	}
 	w.cnn = cnn
 

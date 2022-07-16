@@ -22,6 +22,8 @@ Usage of ./exec-filename:
         the host popcat server (default "popcat.lnquy.com")
   -username string
         username that registered (default "dqkhanh")
+        
+./exec-filename -u user1 -u user2
 ```
 
 ## Contributing

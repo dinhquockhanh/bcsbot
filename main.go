@@ -2,12 +2,9 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"log"
-	"net"
 	"os"
 	"os/signal"
 	"syscall"
@@ -17,11 +14,22 @@ import (
 	"golang.org/x/text/message"
 )
 
+type arrayFlags []string
+
+func (i *arrayFlags) String() string {
+	return "my string representation"
+}
+
+func (i *arrayFlags) Set(value string) error {
+	*i = append(*i, value)
+	return nil
+}
+
 var (
-	username     = flag.String("username", "dqkhanh", "username that registered")
+	users        arrayFlags
 	host         = flag.String("host", "popcat.lnquy.com", "the host popcat server")
-	DefaultPoint = flag.Int("diff", 555, "diff number, if long time you don't receive the point, plz try decrease the diff number, ex: -diff=100")
-	MaxCnn       = 5
+	DefaultPoint = flag.Int("diff", 398, "diff number, if long time you don't receive the point, plz try decrease the diff number, ex: -diff=100")
+	MaxCnn       = flag.Int("max", 4, "max connections, if max = 5, you don't have connection for browser...")
 
 	printer = message.NewPrinter(language.English)
 )
@@ -32,14 +40,15 @@ func main() {
 			log.Println("exited.")
 		}
 	}()
+
+	flag.Var(&users, "u", "list users name, ex: -u=user1 -u=user2")
 	flag.Parse()
 	log.SetFlags(log.Ldate | log.Ltime)
 
 	signChan := make(chan os.Signal, 1)
 	signal.Notify(signChan, os.Interrupt, syscall.SIGTERM)
+	wss := make([]*Websocker, *MaxCnn)
 	done := make(chan struct{})
-	wss := make([]*Websocker, MaxCnn)
-	point := make(chan int, MaxCnn)
 	fmt.Println(`
   ____   _____  _____   ____   ____ _______ 
  |  _ \ / ____|/ ____| |  _ \ / __ \__   __|
@@ -50,50 +59,57 @@ func main() {
                                             
                                             
 `)
-	c := 0
-	for i := 0; i < MaxCnn; i++ {
-		ws := NewWebsocker(*host, *username, fmt.Sprintf("hand %d", i+1))
-		if err := ws.Connect(); err != nil {
-			log.Printf("%s is broken", ws.name)
-			continue
-		}
-		c++
-		wss[i] = ws
-		go receiveMsg(done, point, ws)
-		go submit(done, ws)
-		go showPoints(point, done)
+
+	for _, userId := range users {
+		name := userId
+		go func() {
+			for i := 0; i < *MaxCnn; i++ {
+				n := i + 1
+				go Pop(name, n, &wss, done)
+			}
+		}()
 	}
 
-	log.Printf("%s get point with %d big hands (max = %d)", *username, c, MaxCnn)
-
-	go shutdown(signChan, wss)
+	go shutdown(signChan, &wss)
 
 	<-signChan
 	log.Println("Shutting down")
-
-	close(signChan)
-	<-done
+	// TODO: handle close connection
 }
+func Pop(username string, hand int, wss *[]*Websocker, done chan struct{}) {
+	point := make(chan int, *MaxCnn)
+	ws := &Websocker{}
+	for {
+		ws = NewWebsocker(*host, username, fmt.Sprintf("hand %d", hand))
+		log.Printf("waiting hand %d of %s login", hand, username)
+		if err := ws.Connect(); err == nil {
+			*wss = append(*wss, ws)
 
+			break
+
+		}
+	}
+	log.Printf("hand %d of %s ready to popcat", hand, username)
+	go receiveMsg(done, point, ws)
+	go submit(done, ws)
+	go showPoints(point, done, username)
+}
 func receiveMsg(done chan struct{}, point chan<- int, ws *Websocker) {
 	msg := &ReceiveMsg{}
 	defer close(done)
 
 	for {
-		_, message, err := ws.ReadMessage()
+		_, rawMsg, err := ws.ReadMessage()
 		if err != nil {
-			if errors.Is(err, io.ErrUnexpectedEOF) {
-				ws.Connect()
-				continue
+			for {
+				if err := ws.Connect(); err == nil {
+					break
+				}
+				time.Sleep(300 * time.Millisecond)
 			}
-			if errors.Is(err, net.ErrClosed) {
-				return
-			}
-			log.Println("read:", err)
-			return
-
+			continue
 		}
-		if err := json.Unmarshal(message, msg); err != nil {
+		if err := json.Unmarshal(rawMsg, msg); err != nil {
 			log.Println("decode msg:", err)
 		}
 
@@ -103,12 +119,15 @@ func receiveMsg(done chan struct{}, point chan<- int, ws *Websocker) {
 	}
 }
 
-func shutdown(interrupt chan os.Signal, wss []*Websocker) {
+func shutdown(interrupt chan os.Signal, wss *[]*Websocker) {
 	for {
 		select {
 		case <-interrupt:
 			log.Println("stopping pop cat...")
-			for _, ws := range wss {
+			for _, ws := range *wss {
+				if ws == nil {
+					continue
+				}
 				if err := ws.Close(); err != nil {
 					log.Println("close connection:", err)
 					return
@@ -134,18 +153,20 @@ func submit(done chan struct{}, ws *Websocker) {
 				log.Println("ping:", err)
 			}
 		case <-tickerSend.C:
+			if *DefaultPoint == 0 {
+				continue
+			}
 			if err := ws.submitPoint(*DefaultPoint); err != nil {
 				if err.Error() == "websocket: close sent" {
 					ws.Connect()
 				}
-				log.Println("submit point:", err)
+				//log.Println("submit point:", err)
 			}
 		}
-
 	}
 }
 
-func showPoints(point <-chan int, done chan struct{}) {
+func showPoints(point <-chan int, done chan struct{}, username string) {
 	cp := 0
 	t := time.Now()
 	for {
@@ -156,7 +177,13 @@ func showPoints(point <-chan int, done chan struct{}) {
 			if cp != p {
 				diff := p - cp
 				if cp != 0 {
-					fmt.Printf("\rYour Points: %s (incre %s points in %.fs)", printer.Sprintf("%d", p), printer.Sprintf("%d", diff), time.Since(t).Seconds())
+					fmt.Printf(
+						"\r%s Points: %s (incre %s points in %.fs)",
+						username,
+						printer.Sprintf("%d", p),
+						printer.Sprintf("%d", diff),
+						time.Since(t).Seconds(),
+					)
 				}
 				cp = p
 				t = time.Now()
