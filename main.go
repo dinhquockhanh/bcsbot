@@ -28,8 +28,10 @@ func (i *arrayFlags) Set(value string) error {
 var (
 	users        arrayFlags
 	host         = flag.String("host", "popcat.lnquy.com", "the host popcat server")
-	DefaultPoint = flag.Int("diff", 398, "diff number, if long time you don't receive the point, plz try decrease the diff number, ex: -diff=100")
-	MaxCnn       = flag.Int("max", 4, "max connections, if max = 5, you don't have connection for browser...")
+	defaultPoint = flag.Int("diff", 398, "the diff number, if long time you don't receive the point, plz try decrease the diff number, ex: -diff=100")
+	maxCnn       = flag.Int("max", 4, "the max connections, if max = 5, you don't have connection for browser...")
+	rps          = flag.Int("rps", 1, "the request per second")
+	token        = flag.String("token", "", "the team's password")
 
 	printer = message.NewPrinter(language.English)
 )
@@ -47,7 +49,7 @@ func main() {
 
 	signChan := make(chan os.Signal, 1)
 	signal.Notify(signChan, os.Interrupt, syscall.SIGTERM)
-	wss := make([]*Websocker, *MaxCnn)
+	wss := make([]*Websocker, *maxCnn)
 	done := make(chan struct{})
 	fmt.Println(`
   ____   _____  _____   ____   ____ _______ 
@@ -63,7 +65,7 @@ func main() {
 	for _, userId := range users {
 		name := userId
 		go func() {
-			for i := 0; i < *MaxCnn; i++ {
+			for i := 0; i < *maxCnn; i++ {
 				n := i + 1
 				go Pop(name, n, &wss, done)
 			}
@@ -77,10 +79,10 @@ func main() {
 	// TODO: handle close connection
 }
 func Pop(username string, hand int, wss *[]*Websocker, done chan struct{}) {
-	point := make(chan int, *MaxCnn)
+	point := make(chan int, *maxCnn)
 	ws := &Websocker{}
 	for {
-		ws = NewWebsocker(*host, username, fmt.Sprintf("hand %d", hand))
+		ws = NewWebsocker(*host, username, fmt.Sprintf("hand %d", hand), *token)
 		log.Printf("waiting hand %d of %s login", hand, username)
 		if err := ws.Connect(); err == nil {
 			*wss = append(*wss, ws)
@@ -141,7 +143,8 @@ func shutdown(interrupt chan os.Signal, wss *[]*Websocker) {
 func submit(done chan struct{}, ws *Websocker) {
 	tickerPing := time.NewTicker(15 * time.Second)
 	defer tickerPing.Stop()
-	tickerSend := time.NewTicker(time.Second)
+
+	tickerSend := time.NewTicker(time.Duration(*rps) * time.Second)
 	defer tickerSend.Stop()
 
 	for {
@@ -153,10 +156,10 @@ func submit(done chan struct{}, ws *Websocker) {
 				log.Println("ping:", err)
 			}
 		case <-tickerSend.C:
-			if *DefaultPoint == 0 {
+			if *defaultPoint == 0 {
 				continue
 			}
-			if err := ws.submitPoint(*DefaultPoint); err != nil {
+			if err := ws.submitPoint(*defaultPoint); err != nil {
 				if err.Error() == "websocket: close sent" {
 					ws.Connect()
 				}

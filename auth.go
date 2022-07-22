@@ -14,9 +14,9 @@ var (
 	errMaxConnection = errors.New("maximum number of sessions has exceeded, plz try close browser and run again")
 )
 
-func getWsSessionId(host, playerId string) (string, error) {
+func getWsSessionId(host, playerId, token string) (string, error) {
 	var (
-		getSessionPath = fmt.Sprintf("http://%s/api/v1/players/%s/ws", host, playerId)
+		getSessionPath = fmt.Sprintf("http://%s/api/v1/players/%s/ws?token=%s", host, playerId, token)
 		resp           *http.Response
 		err            error
 	)

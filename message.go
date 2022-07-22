@@ -38,6 +38,7 @@ type (
 		wsSessionID string
 		cnn         *websocket.Conn
 		name        string
+		token       string
 	}
 )
 
@@ -52,18 +53,19 @@ var (
 	errInitCnn = errors.New("create connection failed")
 )
 
-func NewWebsocker(host string, userId string, name string) *Websocker {
+func NewWebsocker(host string, userId string, name string, token string) *Websocker {
 
 	return &Websocker{
 		userId: userId,
 		host:   host,
 		name:   name,
+		token:  token,
 	}
 }
 
 func (w *Websocker) ConnectUntilSuccess() string {
 	for {
-		wsSessionId, err := getWsSessionId(w.host, w.userId)
+		wsSessionId, err := getWsSessionId(w.host, w.userId, w.token)
 		if err != nil {
 			time.Sleep(200 * time.Millisecond)
 			continue
