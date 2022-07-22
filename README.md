@@ -4,9 +4,10 @@ BCS Bot is a command line tool, auto get point in popcat game. This bot just use
 
 ## Installation
 
-install the [Go](https://go.dev/doc/install).
+
 
 ## Build
+install the [Go](https://go.dev/doc/install).
 
 - linux:
 ```bash
@@ -17,11 +18,18 @@ env GOOS=linux go build -o exec-filename
 ./exec-filename -h
 Usage of ./exec-filename:
   -diff int
-        diff number (default 555)
+        the diff number, if long time you don't receive the point, plz try decrease the diff number, ex: -diff=100 (default 398)
   -host string
         the host popcat server (default "popcat.lnquy.com")
-  -username string
-        username that registered (default "dqkhanh")
+  -max int
+        the max connections, if max = 5, you don't have connection for browser... (default 4)
+  -rps int
+        the request per second (default 1)
+  -token string
+        the team's password
+  -u value
+        list users name, ex: -u=user1 -u=user2
+
         
 ./exec-filename -u user1 -u user2
 ```
