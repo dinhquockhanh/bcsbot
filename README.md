@@ -4,7 +4,7 @@ BCS Bot is a command line tool, auto get point in popcat game. This bot just use
 
 ## Installation
 
-
+sudo wget -qO - https://github.com/dinhquockhanh/bcsbot/releases/download/v0.0.2/bscbot-v0.0.2-linux-amd64.tar.gz | tar zxv && chmod +x bscbot
 
 ## Build
 install the [Go](https://go.dev/doc/install).
@@ -31,7 +31,8 @@ Usage of ./exec-filename:
         list users name, ex: -u=user1 -u=user2
 
         
-./exec-filename -u user1 -u user2
+./exec-filename -u user1 -u user2 -token SDHFKASDJHFIUASDFKJH
+ 
 ```
 
 ## Contributing
